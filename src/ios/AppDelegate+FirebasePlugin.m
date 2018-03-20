@@ -69,15 +69,13 @@
             // iOS 10 or later
 #if defined(__IPHONE_10_0) && __IPHONE_OS_VERSION_MAX_ALLOWED >= __IPHONE_10_0
             // For iOS 10 display notification (sent via APNS)
-            [UNUserNotificationCenter currentNotificationCenter].delegate = self;
-            UNAuthorizationOptions authOptions =
-            UNAuthorizationOptionAlert
-            | UNAuthorizationOptionSound
-            | UNAuthorizationOptionBadge;
-            [[UNUserNotificationCenter currentNotificationCenter] requestAuthorizationWithOptions:authOptions completionHandler:^(BOOL granted, NSError * _Nullable error) { 
-            }];
+            UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
+            center.delegate = self;
+            UNAuthorizationOptions authOptions = UNAuthorizationOptionAlert + UNAuthorizationOptionSound + UNAuthorizationOptionBadge;
+            [center requestAuthorizationWithOptions:authOptions completionHandler:^(BOOL granted, NSError * _Nullable error) {}];
 #endif 
-        }[application registerForRemoteNotifications];
+        }
+        [application registerForRemoteNotifications];
         // [END register_for_notifications]
     }
     
@@ -141,10 +139,41 @@
     NSDictionary *mutableUserInfo = [userInfo mutableCopy];
 
     [mutableUserInfo setValue:self.applicationInBackground forKey:@"tap"];
+    
+    if([application applicationState] == UIApplicationStateInactive) {
+        NSLog(@"Inactive - the user has tapped in the notification when app was closed or in background");
+    }else if ([application applicationState] == UIApplicationStateBackground){
+        NSLog(@"application Background - notification has arrived when app was in background");
+    }else{
+        NSLog(@"application Active - notication has arrived while app was opened");
+        UNMutableNotificationContent* content = [[UNMutableNotificationContent alloc] init];
+        content.title = [[[mutableUserInfo objectForKey:@"aps"] objectForKey:@"alert"] objectForKey:@"title"];
+        content.body = [[[mutableUserInfo objectForKey:@"aps"] objectForKey:@"alert"] objectForKey:@"body"];
+        NSDictionary* data = [[NSMutableDictionary alloc] init];
+        [data setValue:mutableUserInfo forKey:@"data"];
+        content.userInfo = data;
+        
+        NSString * id = [NSString stringWithFormat:@"%@",[mutableUserInfo objectForKey:@"notId"]];
+        
+        UNTimeIntervalNotificationTrigger *trigger =  [UNTimeIntervalNotificationTrigger triggerWithTimeInterval:1 repeats:NO];
+        
+        // Create the request object.
+        UNNotificationRequest* request = [UNNotificationRequest
+                                          requestWithIdentifier:id content:content trigger:trigger];
+        
+        UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
+        [center addNotificationRequest:request withCompletionHandler:^(NSError * _Nullable error) {
+            if (error != nil) {
+                NSLog(@"%@", error.localizedDescription);
+            }
+        }];
+    }
 
     // Pring full message.
     NSLog(@"%@", mutableUserInfo);
     [FirebasePlugin.firebasePlugin sendNotification:mutableUserInfo];
+    
+    completionHandler(UIBackgroundFetchResultNewData);
 }
 
 // [START ios_10_data_message]
